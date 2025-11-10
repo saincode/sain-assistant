@@ -2,7 +2,7 @@
 "use client";
 
 import { useState } from 'react';
-import { FiSend, FiPaperclip } from 'react-icons/fi';
+import { FiSend, FiPaperclip, FiTrash2 } from 'react-icons/fi';
 import { FaRobot } from 'react-icons/fa';
 
 interface Message {
@@ -16,6 +16,14 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [currentFile, setCurrentFile] = useState<{ name: string; status: 'uploading' | 'success' | 'error' } | null>(null);
+
+  // Clear all messages
+  const handleClear = () => {
+    setMessages([]);
+    setInput('');
+    setLoading(false);
+    setCurrentFile(null);
+  };
 
   // --- Chat Message Submit ---
   const handleSubmit = async (e: React.FormEvent) => {
@@ -108,28 +116,44 @@ export default function Home() {
     <main className="flex min-h-screen flex-col bg-[#121212] text-white relative overflow-hidden">
       {/* No background image, just solid color as before */}
       {/* Header */}
-      <div className="flex flex-col items-center justify-center px-4 py-4 border-b border-gray-700 bg-[#16181c] relative">
-        {/* Robot SVG Illustration */}
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg" className="mb-2 animate-fade-in">
-          <circle cx="30" cy="30" r="28" fill="#23272f" stroke="#3b82f6" strokeWidth="2" />
-          <rect x="18" y="22" width="24" height="16" rx="8" fill="#1e293b" stroke="#38bdf8" strokeWidth="2" />
-          <circle cx="24" cy="30" r="3" fill="#38bdf8" />
-          <circle cx="36" cy="30" r="3" fill="#38bdf8" />
-          <rect x="26" y="36" width="8" height="3" rx="1.5" fill="#38bdf8" />
-          <rect x="28" y="14" width="4" height="8" rx="2" fill="#38bdf8" />
-        </svg>
-  <h1 className="text-4xl font-extrabold flex items-center gap-2 text-[#38bdf8] drop-shadow">Dora <span className="text-base text-gray-400 font-normal">AI Copilot</span></h1>
-        <span className="text-xs text-gray-500 mt-1">Your friendly robot assistant</span>
+      <div className="flex items-center justify-between px-6 py-3 border-b border-purple-800/30 bg-gradient-to-r from-[#13151a] to-[#1A1C23] relative">
+        {/* Left: Logo and Name */}
+        <div className="flex items-center gap-3">
+          <svg width="40" height="40" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="30" cy="30" r="28" fill="#1A1C23" stroke="#A855F7" strokeWidth="2" />
+            <rect x="18" y="22" width="24" height="16" rx="8" fill="#1e1e2e" stroke="#A855F7" strokeWidth="2" />
+            <circle cx="24" cy="30" r="3" fill="#E879F9" />
+            <circle cx="36" cy="30" r="3" fill="#E879F9" />
+            <rect x="26" y="36" width="8" height="3" rx="1.5" fill="#E879F9" />
+            <rect x="28" y="14" width="4" height="8" rx="2" fill="#E879F9" />
+          </svg>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-500 to-pink-500 text-transparent bg-clip-text">sAIn</h1>
+        </div>
+        
+        {/* Center: Tagline */}
+        <div className="absolute left-1/2 transform -translate-x-1/2">
+          <span className="text-purple-200/70 font-medium">Your Intelligent Document Assistant</span>
+        </div>
+        
+        {/* Right: Optional space for future buttons/menu */}
+        <div className="w-[100px]"></div>
       </div>
 
       {/* Chat Area */}
   <div className="flex-1 flex flex-col">
         {messages.length === 0 && (
           <div className="flex-1 flex items-center justify-center">
-            <div className="bg-white/5 backdrop-blur-lg border border-gray-700 shadow-2xl rounded-2xl px-10 py-8 flex flex-col items-center animate-fade-in-up max-w-xl">
-              <h2 className="text-2xl font-bold text-white mb-2 tracking-tight">Welcome to Dora</h2>
-              <p className="text-gray-300 text-lg text-center mb-2">Upload a <span className="text-blue-400 font-semibold">PDF</span> or <span className="text-green-400 font-semibold">text file</span>, or ask anything to <span className="text-cyan-400 font-semibold">Dora</span>!</p>
-              <span className="text-xs text-gray-500 mt-2">Your AI copilot for documents and chat</span>
+            <div className="bg-gradient-to-br from-purple-950/50 via-black/80 to-pink-950/50 backdrop-blur-lg border border-purple-800/30 shadow-2xl rounded-2xl px-10 py-8 flex flex-col items-center animate-fade-in-up max-w-xl">
+              <h2 className="text-3xl font-bold mb-4 bg-gradient-to-r from-purple-400 via-pink-400 to-purple-500 bg-clip-text text-transparent">
+                Your Personal AI Assistant
+              </h2>
+              <p className="text-gray-200 text-lg text-center mb-3 leading-relaxed">
+                Drop your <span className="text-purple-400 font-medium">documents</span> or start a{" "}
+                <span className="text-pink-400 font-medium">conversation</span> to explore together!
+              </p>
+              <p className="text-gray-400 text-sm italic">
+                Powered by advanced AI for seamless document analysis and interactive chat
+              </p>
             </div>
           </div>
         )}
@@ -139,20 +163,22 @@ export default function Home() {
           {messages.map((message, index) => (
             <div
               key={index}
-              className={`px-4 py-6 transition-all duration-500 animate-fade-in-up ${
-                message.role === 'assistant' ? 'bg-[#1e1f24]' : 'bg-[#121212]'
-              }`}
+              className={`px-4 py-6 mb-4 transition-all duration-500 animate-fade-in-up`}
               style={{ animationDelay: `${index * 60}ms` }}
             >
-              <div className="max-w-3xl mx-auto flex gap-4">
+              <div className={`max-w-3xl mx-auto flex gap-4 p-4 rounded-xl ${
+                message.role === 'assistant' 
+                  ? 'bg-[#1e1f24] shadow-lg border border-purple-500/10' 
+                  : 'bg-[#121212] border border-pink-500/10'
+              }`}>
                 <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm shadow-lg transition-transform duration-300 ${
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm shadow-lg transition-all duration-300 ${
                     message.role === 'assistant'
-                      ? 'bg-gradient-to-br from-blue-500 to-cyan-400'
-                      : 'bg-gradient-to-br from-blue-400 via-cyan-300 to-cyan-500 ring-2 ring-cyan-300/40'
-                  } hover:scale-110`}
+                      ? 'bg-[#121212] border-2 border-purple-500'
+                      : 'bg-[#121212] border-2 border-pink-500'
+                  } hover:scale-110 hover:shadow-lg hover:shadow-purple-500/20`}
                 >
-                  {message.role === 'user' ? '' : <FaRobot className="w-5 h-5 text-white" />}
+                  {message.role === 'user' ? '⚡' : '⭐'}
                 </div>
                 <div className="flex-1 whitespace-pre-wrap leading-relaxed text-gray-200 animate-fade-in">
                   {message.content}
@@ -162,12 +188,14 @@ export default function Home() {
           ))}
 
           {loading && (
-            <div className="px-4 py-6 bg-[#1e1f24]">
-              <div className="max-w-3xl mx-auto flex gap-4">
-                <div className="w-8 h-8 rounded-full bg-green-600 flex items-center justify-center text-sm">
-                  A
+            <div className="px-4 py-6">
+              <div className="max-w-3xl mx-auto p-4 rounded-xl bg-[#1e1f24] border border-purple-500/10 shadow-lg">
+                <div className="flex gap-4">
+                  <div className="w-8 h-8 rounded-full bg-[#121212] border-2 border-purple-500 flex items-center justify-center text-sm animate-pulse">
+                    ⭐
+                  </div>
+                  <div className="flex-1 text-gray-400">Thinking...</div>
                 </div>
-                <div className="flex-1 text-gray-400">Thinking...</div>
               </div>
             </div>
           )}
@@ -175,41 +203,54 @@ export default function Home() {
 
         {/* Input Box */}
         <div className="border-t border-gray-800 p-4">
-          <form onSubmit={handleSubmit} className="max-w-3xl mx-auto">
-            <div className="flex items-center gap-2 bg-[#1a1b1e] rounded-xl border border-gray-700 p-2 animate-fade-in-up">
-              <button
-                type="button"
-                onClick={handleFileUpload}
-                className="p-2 hover:bg-gray-800 rounded-lg text-gray-400 hover:text-gray-200 transition-all duration-300 hover:scale-110 focus:scale-110"
-                disabled={uploading}
-              >
-                <FiPaperclip className="h-5 w-5" />
-              </button>
+          <div className="max-w-3xl mx-auto space-y-4">
+            {/* Clear Button */}
+            {messages.length > 0 && (
+              <div className="flex justify-end">
+                <button
+                  onClick={handleClear}
+                  type="button"
+                  className="group px-4 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 rounded-xl transition-all duration-200 flex items-center gap-2 text-sm border border-red-500/20 hover:border-red-500/30 shadow-lg hover:shadow-red-500/10"
+                >
+                  <FiTrash2 className="w-4 h-4 transition-transform group-hover:scale-110" />
+                  <span>Clear Chat</span>
+                </button>
+              </div>
+            )}
+            
+            <form onSubmit={handleSubmit} className="w-full">
+              <div className="flex items-center gap-2 bg-gradient-to-r from-[#1e1e2e] to-[#1A1C23] rounded-2xl border border-purple-800/30 p-3 animate-fade-in-up shadow-lg">
+                <button
+                  type="button"
+                  onClick={handleFileUpload}
+                  className="p-2 hover:bg-purple-500/10 rounded-xl text-purple-400 hover:text-purple-300 transition-all duration-200 hover:scale-105"
+                  disabled={uploading}
+                >
+                  <FiPaperclip className="h-5 w-5" />
+                </button>
 
-              <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="How can I help you today?"
-                className="flex-1 bg-transparent border-0 focus:ring-0 focus:outline-none text-white placeholder-gray-500 animate-fade-in"
-                disabled={loading}
-              />
+                <input
+                  type="text"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder="How can I help you today?"
+                  className="flex-1 bg-transparent border-0 focus:ring-2 focus:ring-purple-500/20 focus:outline-none text-purple-100 placeholder-purple-300/40 rounded-xl px-3 py-2"
+                  disabled={loading}
+                />
 
-              <button
-                type="submit"
-                disabled={loading || !input.trim()}
-                className="p-2 hover:bg-gray-800 rounded-lg text-gray-400 hover:text-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 hover:scale-110 focus:scale-110"
-              >
-                <FiSend className="h-5 w-5" />
-              </button>
-            </div>
-          </form>
+                <button
+                  type="submit"
+                  disabled={loading || !input.trim()}
+                  className="p-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-purple-500/25"
+                >
+                  <FiSend className="h-5 w-5" />
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       </div>
-      {/* Footer */}
-      <footer className="w-full bg-[#18181b] text-gray-400 text-center py-3 border-t border-gray-800 text-sm">
-        <div>Made by Anil Kumar &nbsp;|&nbsp; &copy; 2025 Dora AI. All rights reserved.</div>
-      </footer>
+
     </main>
   );
 }

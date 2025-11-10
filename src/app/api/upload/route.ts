@@ -134,8 +134,19 @@ export async function POST(req: NextRequest) {
     }
 
     // init Pinecone client
+    console.log('Starting Pinecone initialization with key:', PINECONE_API_KEY.substring(0, 10) + '...');
     const pinecone = new Pinecone({ apiKey: PINECONE_API_KEY });
+    console.log('Initializing Pinecone index:', PINECONE_INDEX_NAME);
     const index = pinecone.index(PINECONE_INDEX_NAME);
+    
+    // Test index connection
+    try {
+      const description = await index.describeIndexStats();
+      console.log('Pinecone index stats:', JSON.stringify(description));
+    } catch (error: any) {
+      console.error('Error connecting to Pinecone:', error);
+      throw new Error(`Failed to connect to Pinecone: ${error?.message || 'Unknown error'}`);
+    }
 
     // generate embeddings and upsert in batches
     const vectors = await Promise.all(
