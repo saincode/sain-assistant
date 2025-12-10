@@ -76,16 +76,46 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ---
 
-## 🎨 Recent Updates
+## 🎨 Recent Updates (v1.1.0)
 
-- ✨ New **brain + circuit** logo design
+### UI/UX Improvements
+- ✨ New **brain + circuit** logo design for AI identity
 - 🎯 Updated input field with cyan/teal theme and pill shape
 - 💜 Matching purple/pink gradient send button
-- 📝 Improved placeholder text: "Ask me anything about your documents..."
+- 📝 Improved placeholder text: "Ask me anything..."
+- 📱 **Full responsive design** for mobile, tablet, and desktop
+  - Mobile-optimized padding and spacing
+  - Responsive text sizes with breakpoints
+  - Touch-friendly icon sizes
+  - Smart header tagline (hidden on mobile)
+- 🎨 Enhanced visual hierarchy with smooth animations
+- ⚡ Better performance on slower networks
 
 ---
 
-## 📁 Project Structure
+## 📱 Responsive Design
+
+The app is fully responsive and optimized for all devices:
+
+### Mobile (320px - 640px)
+- Compact header with optimized logo size
+- Adaptive spacing and padding
+- Touch-friendly button sizes
+- Responsive text that scales properly
+- Smart placeholder text
+
+### Tablet (641px - 1024px)
+- Transitional layout with medium spacing
+- Full feature visibility
+- Optimized for landscape and portrait
+
+### Desktop (1025px+)
+- Full feature set with tagline
+- Maximum spacing and readability
+- Enhanced hover effects
+- Optimal for productivity
+
+---
 
 ```
 src/
@@ -119,12 +149,23 @@ src/
 
 ## 🚢 Deployment
 
-The project is deployed on Vercel and automatically deploys on every push to `main`.
+### Current Status
+- ✅ **Live on Vercel:** https://sain-assistant.vercel.app/
+- ✅ **Auto-deploys** on every push to `main` branch
+- ✅ **Responsive** across all devices
+- ✅ **Production-ready**
 
-To deploy manually:
+### Deploy Manually
 ```bash
 vercel --prod
 ```
+
+### Environment Variables Required
+Make sure these are set in Vercel project settings:
+- `OPENROUTER_API_KEY`
+- `PINECONE_API_KEY`
+- `PINECONE_INDEX_NAME`
+- `OPENROUTER_CHAT_MODEL`
 
 ---
 
@@ -175,7 +216,24 @@ This project is open source and available under the MIT License.
 
 ---
 
-## 🤝 Contributing
+## 📋 Changelog
+
+### v1.1.0 (December 11, 2025)
+- 🎨 **Full responsive design** - Mobile, tablet, desktop optimized
+- 🧠 **New brain + circuit logo** - Represents AI intelligence
+- 🎯 **Enhanced UI** - Cyan/teal input, purple/pink send button
+- 📝 **Improved UX** - Better placeholder text and spacing
+- ⚡ **Better performance** - Optimized for all screen sizes
+- 📱 **Touch-friendly** - Improved mobile experience
+
+### v1.0.0 (Initial Release)
+- Document upload and indexing
+- AI-powered chat with semantic search
+- Pinecone vector database integration
+- OpenRouter API for embeddings and LLM
+- Beautiful gradient UI with Tailwind CSS
+
+---
 
 Contributions are welcome! Feel free to:
 - Report issues
