@@ -234,11 +234,11 @@ export default function Home() {
             )}
             
             <form onSubmit={handleSubmit} className="w-full">
-              <div className="flex items-center gap-2 bg-gradient-to-r from-[#1e1e2e] to-[#1A1C23] rounded-2xl border border-purple-800/30 p-3 animate-fade-in-up shadow-lg">
+              <div className="flex items-center gap-3 bg-gradient-to-r from-blue-950/40 via-cyan-950/30 to-teal-950/40 rounded-full border border-cyan-500/20 p-2 animate-fade-in-up shadow-xl hover:shadow-cyan-500/10 transition-all duration-300">
                 <button
                   type="button"
                   onClick={handleFileUpload}
-                  className="p-2 hover:bg-purple-500/10 rounded-xl text-purple-400 hover:text-purple-300 transition-all duration-200 hover:scale-105"
+                  className="p-2.5 hover:bg-cyan-500/20 rounded-full text-cyan-400 hover:text-cyan-300 transition-all duration-200 hover:scale-110"
                   disabled={uploading}
                 >
                   <FiPaperclip className="h-5 w-5" />
@@ -248,15 +248,15 @@ export default function Home() {
                   type="text"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder="How can I help you today?"
-                  className="flex-1 bg-transparent border-0 focus:ring-2 focus:ring-purple-500/20 focus:outline-none text-purple-100 placeholder-purple-300/40 rounded-xl px-3 py-2"
+                  placeholder="Ask me anything about your documents..."
+                  className="flex-1 bg-transparent border-0 focus:ring-0 focus:outline-none text-cyan-100 placeholder-cyan-400/40 rounded-full px-4 py-2 text-sm"
                   disabled={loading}
                 />
 
                 <button
                   type="submit"
                   disabled={loading || !input.trim()}
-                  className="p-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-purple-500/25"
+                  className="p-3 bg-gradient-to-r from-purple-500 via-pink-500 to-purple-500 hover:from-purple-600 hover:via-pink-600 hover:to-purple-600 text-white rounded-full disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-lg hover:shadow-purple-500/30 hover:scale-110"
                 >
                   <FiSend className="h-5 w-5" />
                 </button>
