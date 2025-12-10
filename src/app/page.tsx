@@ -120,12 +120,27 @@ export default function Home() {
         {/* Left: Logo and Name */}
         <div className="flex items-center gap-3">
           <svg width="40" height="40" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="30" cy="30" r="28" fill="#1A1C23" stroke="#A855F7" strokeWidth="2" />
-            <rect x="18" y="22" width="24" height="16" rx="8" fill="#1e1e2e" stroke="#A855F7" strokeWidth="2" />
-            <circle cx="24" cy="30" r="3" fill="#E879F9" />
-            <circle cx="36" cy="30" r="3" fill="#E879F9" />
-            <rect x="26" y="36" width="8" height="3" rx="1.5" fill="#E879F9" />
-            <rect x="28" y="14" width="4" height="8" rx="2" fill="#E879F9" />
+            {/* Brain shape */}
+            <path d="M30 8C20 8 12 16 12 26C12 32 15 37 20 40C22 35 24 30 28 28V22C28 18 29 14 30 10C31 14 32 18 32 22V28C36 30 38 35 40 40C45 37 48 32 48 26C48 16 40 8 30 8Z" fill="#A855F7" opacity="0.3" />
+            <path d="M30 8C20 8 12 16 12 26C12 32 15 37 20 40C22 35 24 30 28 28V22C28 18 29 14 30 10C31 14 32 18 32 22V28C36 30 38 35 40 40C45 37 48 32 48 26C48 16 40 8 30 8Z" fill="none" stroke="#A855F7" strokeWidth="2" />
+            
+            {/* Circuit lines */}
+            <line x1="20" y1="26" x2="20" y2="45" stroke="#E879F9" strokeWidth="1.5" />
+            <line x1="30" y1="26" x2="30" y2="48" stroke="#E879F9" strokeWidth="1.5" />
+            <line x1="40" y1="26" x2="40" y2="45" stroke="#E879F9" strokeWidth="1.5" />
+            
+            {/* Connection nodes */}
+            <circle cx="20" cy="45" r="2" fill="#E879F9" />
+            <circle cx="30" cy="48" r="2" fill="#E879F9" />
+            <circle cx="40" cy="45" r="2" fill="#E879F9" />
+            
+            {/* Horizontal circuit line */}
+            <line x1="20" y1="45" x2="40" y2="45" stroke="#E879F9" strokeWidth="1.5" />
+            
+            {/* Center synapses */}
+            <circle cx="24" cy="24" r="1.5" fill="#E879F9" />
+            <circle cx="30" cy="20" r="1.5" fill="#E879F9" />
+            <circle cx="36" cy="24" r="1.5" fill="#E879F9" />
           </svg>
           <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-500 to-pink-500 text-transparent bg-clip-text">sAIn</h1>
         </div>
