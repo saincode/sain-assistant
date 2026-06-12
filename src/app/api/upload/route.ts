@@ -2,41 +2,179 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Pinecone } from "@pinecone-database/pinecone";
 import { getEmbeddings } from "@/utils/embeddings";
-
-import * as os from "os";
-import * as path from "path";
-import fs from "fs/promises";
+import pLimit from "p-limit";
 
 // Configuration
 export const dynamic = "force-dynamic";
 export const maxDuration = 300; // 5 minutes timeout
 
-// --- parseDocument: pdf2json -> pdf-parse-fork (fallback) -> plain text for .txt/.md ---
-async function parseDocument(file: File): Promise<{ text: string; parser: string }> {
+// --- DOCX text extraction ---
+async function extractDocxText(buffer: Buffer): Promise<string> {
+  // DOCX files are ZIP archives containing XML. We extract the word/document.xml
+  // using the built-in Node.js APIs (no external dep needed beyond what's available).
+  // We use a simple regex approach to strip XML tags since we only need plain text.
+  try {
+    const { promisify } = await import("util");
+    const zlib = await import("zlib");
+    const unzip = promisify(zlib.unzip);
+
+    // Use JSZip-like approach: read the ZIP and extract document.xml
+    // Since we don't want to add JSZip, we'll use the 'adm-zip' package if available,
+    // or fall back to a direct XML parse of the binary
+    // The docx package is already installed - let's use it properly
+    const { Document, Packer } = await import("docx").catch(() => {
+      throw new Error("docx package not available");
+    });
+
+    // docx package is a writer, not a reader. Use mammoth instead if available.
+    // Fall back to reading as ZIP manually
+    throw new Error("Need ZIP reader");
+  } catch {
+    // Fallback: Extract text from DOCX by reading the ZIP archive manually
+    // DOCX = ZIP file, word/document.xml contains the text
+    try {
+      // Try using a simple ZIP reader approach
+      const text = await extractTextFromDocxBuffer(buffer);
+      return text;
+    } catch (e) {
+      console.warn("DOCX extraction failed:", e);
+      throw new Error(
+        "Could not extract text from DOCX file. Please convert to PDF or TXT."
+      );
+    }
+  }
+}
+
+// Simple DOCX text extractor by reading ZIP entries
+async function extractTextFromDocxBuffer(buffer: Buffer): Promise<string> {
+  // DOCX files are ZIP archives. We find word/document.xml and strip XML tags.
+  // We implement a minimal ZIP reader to find and extract the document.xml entry.
+
+  const EOCD_SIG = 0x06054b50;
+  const LOCAL_SIG = 0x04034b50;
+  const CENTRAL_SIG = 0x02014b50;
+
+  // Find End of Central Directory
+  let eocdOffset = buffer.length - 22;
+  while (eocdOffset >= 0) {
+    if (buffer.readUInt32LE(eocdOffset) === EOCD_SIG) break;
+    eocdOffset--;
+  }
+  if (eocdOffset < 0) throw new Error("Not a valid ZIP/DOCX file");
+
+  const centralDirOffset = buffer.readUInt32LE(eocdOffset + 16);
+  const numEntries = buffer.readUInt16LE(eocdOffset + 10);
+
+  let offset = centralDirOffset;
+  for (let i = 0; i < numEntries; i++) {
+    if (buffer.readUInt32LE(offset) !== CENTRAL_SIG)
+      throw new Error("Invalid central directory");
+    const filenameLength = buffer.readUInt16LE(offset + 28);
+    const extraLength = buffer.readUInt16LE(offset + 30);
+    const commentLength = buffer.readUInt16LE(offset + 32);
+    const localHeaderOffset = buffer.readUInt32LE(offset + 42);
+    const filename = buffer
+      .slice(offset + 46, offset + 46 + filenameLength)
+      .toString("utf8");
+
+    if (filename === "word/document.xml") {
+      // Found it — read local file header
+      const localOffset = localHeaderOffset;
+      if (buffer.readUInt32LE(localOffset) !== LOCAL_SIG)
+        throw new Error("Invalid local file header");
+      const localFilenameLen = buffer.readUInt16LE(localOffset + 26);
+      const localExtraLen = buffer.readUInt16LE(localOffset + 28);
+      const compressionMethod = buffer.readUInt16LE(localOffset + 8);
+      const compressedSize = buffer.readUInt32LE(localOffset + 18);
+      const dataOffset =
+        localOffset + 30 + localFilenameLen + localExtraLen;
+
+      let xmlData: Buffer;
+      if (compressionMethod === 0) {
+        // Stored (no compression)
+        xmlData = buffer.slice(dataOffset, dataOffset + compressedSize);
+      } else if (compressionMethod === 8) {
+        // Deflate
+        const compressed = buffer.slice(
+          dataOffset,
+          dataOffset + compressedSize
+        );
+        const { inflateRawSync } = await import("zlib");
+        xmlData = inflateRawSync(compressed);
+      } else {
+        throw new Error(
+          `Unsupported compression method: ${compressionMethod}`
+        );
+      }
+
+      const xml = xmlData.toString("utf8");
+      // Strip XML tags, preserve paragraph breaks
+      const text = xml
+        .replace(/<w:p[ >]/g, "\n<w:p>") // paragraph start = newline
+        .replace(/<[^>]+>/g, "") // remove all tags
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+
+      return text;
+    }
+
+    offset += 46 + filenameLength + extraLength + commentLength;
+  }
+  throw new Error("word/document.xml not found in DOCX archive");
+}
+
+// --- parseDocument: handles PDF (pdf2json → pdf-parse-fork fallback), DOCX, TXT/MD ---
+async function parseDocument(
+  file: File
+): Promise<{ text: string; parser: string }> {
   const fileType = file.name.split(".").pop()?.toLowerCase();
 
-  // Plain text for .txt/.md
+  // Plain text / markdown
   if (["txt", "md"].includes(fileType || "")) {
     const text = (await file.text()).replace(/\s+/g, " ").trim();
     return { text, parser: "plain-text" };
   }
 
-  // Use pdf2json for PDFs
+  // DOCX files — proper binary extraction
+  if (fileType === "docx") {
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const text = await extractTextFromDocxBuffer(buffer);
+    if (text && text.length > 50) {
+      console.log("parseDocument: used docx-zip-extractor, length=", text.length);
+      return { text, parser: "docx-zip-extractor" };
+    }
+    throw new Error("Failed to extract sufficient text from DOCX file.");
+  }
+
+  // PDF files
   if (fileType === "pdf") {
     const buffer = Buffer.from(await file.arrayBuffer());
+
+    // Try pdf2json first
     try {
       const PDFParser = require("pdf2json");
       const pdfParser = new PDFParser();
       const txtFromPdf2json: string = await new Promise((resolve, reject) => {
-        pdfParser.on("pdfParser_dataError", (errData: any) => reject(errData?.parserError || errData));
-        pdfParser.on("pdfParser_dataReady", (pdfData: any) => {
+        pdfParser.on("pdfParser_dataError", (errData: unknown) =>
+          reject(errData)
+        );
+        pdfParser.on("pdfParser_dataReady", (pdfData: {
+          formImage?: { Pages?: Array<{ Texts?: Array<{ R?: Array<{ T?: string }> }> }> }
+        }) => {
           try {
             const pages = pdfData?.formImage?.Pages ?? [];
             const text = pages
-              .map((page: any) =>
+              .map((page) =>
                 (page.Texts ?? [])
-                  .map((t: any) =>
-                    decodeURIComponent(((t.R ?? []).map((r: any) => r.T || "").join("")) || "")
+                  .map((t) =>
+                    decodeURIComponent(
+                      (t.R ?? []).map((r) => r.T || "").join("")
+                    )
                   )
                   .join(" ")
               )
@@ -55,37 +193,56 @@ async function parseDocument(file: File): Promise<{ text: string; parser: string
         }
       });
       if (txtFromPdf2json && txtFromPdf2json.length > 50) {
-        console.log("parseDocument: used pdf2json, length=", txtFromPdf2json.length);
+        console.log(
+          "parseDocument: used pdf2json, length=",
+          txtFromPdf2json.length
+        );
         return { text: txtFromPdf2json, parser: "pdf2json" };
-      } else {
-        console.warn("parseDocument: pdf2json returned small text (length=" + (txtFromPdf2json?.length ?? 0) + "), falling back to pdf-parse-fork");
       }
+      console.warn(
+        "parseDocument: pdf2json returned small text, falling back to pdf-parse-fork"
+      );
     } catch (err) {
-      console.warn("parseDocument: pdf2json failed, err:", err);
+      console.warn("parseDocument: pdf2json failed:", err);
     }
+
     // Fallback: pdf-parse-fork
     try {
       const pdfParseFork = require("pdf-parse-fork");
       const parsed = await pdfParseFork(buffer);
       const txt = (parsed?.text ?? "").replace(/\s+/g, " ").trim();
       if (txt.length > 50) {
-        console.log("parseDocument: used pdf-parse-fork, length=", txt.length);
+        console.log(
+          "parseDocument: used pdf-parse-fork, length=",
+          txt.length
+        );
         return { text: txt, parser: "pdf-parse-fork" };
       }
-      console.warn("parseDocument: pdf-parse-fork returned small text (length=" + txt.length + ")");
+      console.warn(
+        "parseDocument: pdf-parse-fork returned small text (length=" +
+          txt.length +
+          ")"
+      );
     } catch (err) {
-      console.warn("parseDocument: pdf-parse-fork failed, err:", err);
+      console.warn("parseDocument: pdf-parse-fork failed:", err);
     }
-    throw new Error("Failed to extract text from PDF (no text layer and no fallback succeeded).");
+
+    throw new Error(
+      "Failed to extract text from PDF (no text layer found)."
+    );
   }
 
-  // Fallback for other file types
+  // Generic fallback for other file types
   const text = (await file.text()).replace(/\s+/g, " ").trim();
   return { text, parser: "plain-text" };
 }
 
 // --- splitTextIntoChunks ---
-function splitTextIntoChunks(text: string, chunkSize = 1500, overlap = 250): string[] {
+function splitTextIntoChunks(
+  text: string,
+  chunkSize = 1500,
+  overlap = 250
+): string[] {
   const chunks: string[] = [];
   let start = 0;
   while (start < text.length) {
@@ -109,62 +266,83 @@ export async function POST(req: NextRequest) {
 
     console.log("📄 Processing file:", file.name);
 
-    // parse document (returns text + parser used)
+    // Parse document
     const { text, parser } = await parseDocument(file);
 
     if (!text || text.trim().length < 50) {
-      console.warn("Upload rejected: extracted text length too small:", text?.length ?? 0, "parser:", parser);
+      console.warn(
+        "Upload rejected: extracted text length too small:",
+        text?.length ?? 0,
+        "parser:",
+        parser
+      );
       return NextResponse.json(
-        { error: "Failed to extract sufficient text from document", parser, textSample: text?.slice(0, 500) || "" },
+        {
+          error: "Failed to extract sufficient text from document",
+          parser,
+          textSample: text?.slice(0, 500) || "",
+        },
         { status: 400 }
       );
     }
 
     console.log("✅ Extracted text length:", text.length, "parser:", parser);
 
-    // chunk text
+    // Chunk text
     const chunks = splitTextIntoChunks(text);
     console.log(`✂️ Split into ${chunks.length} chunks`);
 
-    // validate Pinecone config
+    // Validate Pinecone config
     const PINECONE_API_KEY = process.env.PINECONE_API_KEY;
     const PINECONE_INDEX_NAME = process.env.PINECONE_INDEX_NAME;
     if (!PINECONE_API_KEY || !PINECONE_INDEX_NAME) {
-      throw new Error("Pinecone environment variables not set (PINECONE_API_KEY or PINECONE_INDEX_NAME)");
+      throw new Error(
+        "Pinecone environment variables not set (PINECONE_API_KEY or PINECONE_INDEX_NAME)"
+      );
     }
 
-    // init Pinecone client
-    console.log('Starting Pinecone initialization with key:', PINECONE_API_KEY.substring(0, 10) + '...');
+    // Init Pinecone client
     const pinecone = new Pinecone({ apiKey: PINECONE_API_KEY });
-    console.log('Initializing Pinecone index:', PINECONE_INDEX_NAME);
     const index = pinecone.index(PINECONE_INDEX_NAME);
-    
+
     // Test index connection
     try {
       const description = await index.describeIndexStats();
-      console.log('Pinecone index stats:', JSON.stringify(description));
-    } catch (error: any) {
-      console.error('Error connecting to Pinecone:', error);
-      throw new Error(`Failed to connect to Pinecone: ${error?.message || 'Unknown error'}`);
+      console.log(
+        "Pinecone index stats:",
+        JSON.stringify({
+          dimension: description.dimension,
+          totalRecords: description.totalRecordCount,
+        })
+      );
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to connect to Pinecone: ${msg}`);
     }
 
-    // generate embeddings and upsert in batches
+    // Generate embeddings with concurrency limit (max 5 simultaneous requests)
+    const limit = pLimit(5);
+    const safeFileName = file.name.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_.-]/g, "");
+
     const vectors = await Promise.all(
-      chunks.map(async (chunk, i) => {
-        const embedding = await getEmbeddings(chunk); // expects Promise<number[]>
-        return {
-          id: `${file.name.replace(/\s+/g, "_")}-${i}`,
-          values: embedding,
-          metadata: {
-            text: chunk,
-            fileName: file.name,
-            chunkIndex: i,
-            parserUsed: parser,
-          },
-        };
-      })
+      chunks.map((chunk, i) =>
+        limit(async () => {
+          const embedding = await getEmbeddings(chunk);
+          return {
+            id: `${safeFileName}-${i}`,
+            values: embedding,
+            metadata: {
+              text: chunk,
+              fileName: file.name,
+              chunkIndex: i,
+              parserUsed: parser,
+            },
+          };
+        })
+      )
     );
 
+    // Upsert in batches of 50
     const batchSize = 50;
     for (let i = 0; i < vectors.length; i += batchSize) {
       const batch = vectors.slice(i, i + batchSize);
@@ -178,10 +356,12 @@ export async function POST(req: NextRequest) {
       parserUsed: parser,
       chunkCount: chunks.length,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack?.slice(0, 1000) : undefined;
     console.error("❌ Upload route error:", err);
     return NextResponse.json(
-      { error: err.message || "Internal server error", detail: err?.stack?.slice?.(0, 1000) },
+      { error: msg || "Internal server error", detail: stack },
       { status: 500 }
     );
   }
