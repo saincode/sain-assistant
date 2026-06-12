@@ -6,10 +6,20 @@ export const dynamic = "force-dynamic";
 
 // Ordered list of fallback models to try when rate limited
 const FALLBACK_MODELS = [
+  "deepseek/deepseek-chat-v3-0324:free",
+  "google/gemini-2.0-flash-exp:free",
+  "google/gemma-3-27b-it:free",
   "meta-llama/llama-3.3-70b-instruct:free",
+  "meta-llama/llama-3.1-8b-instruct:free",
   "meta-llama/llama-3.2-3b-instruct:free",
-  "nousresearch/hermes-3-llama-3.1-405b:free",
+  "qwen/qwen3-8b:free",
+  "qwen/qwen3-14b:free",
+  "mistralai/mistral-7b-instruct:free",
+  "google/gemma-3-12b-it:free",
   "google/gemma-4-31b-it:free",
+  "nousresearch/hermes-3-llama-3.1-405b:free",
+  "microsoft/phi-3-mini-128k-instruct:free",
+  "huggingfaceh4/zephyr-7b-beta:free",
 ];
 
 async function callOpenRouter(
@@ -170,7 +180,7 @@ ${context}`
       } catch (err: unknown) {
         lastError = err instanceof Error ? err.message : String(err);
         console.error(`❌ Model ${model} failed:`, lastError);
-        break; // Non-rate-limit error, stop trying
+        // Continue trying other models instead of stopping
       }
     }
 
