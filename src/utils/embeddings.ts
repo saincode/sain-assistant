@@ -4,7 +4,7 @@ export async function getEmbeddings(text: string): Promise<number[]> {
   }
 
   const apiKey = process.env.OPENROUTER_API_KEY;
-  const model = process.env.EMBEDDING_MODEL || "mistralai/mistral-embed";
+  const model = process.env.EMBEDDING_MODEL || "mistralai/mistral-embed-2312";
 
   if (!apiKey) {
     throw new Error("OPENROUTER_API_KEY is not set in .env.local");
