@@ -8,42 +8,7 @@ import pLimit from "p-limit";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300; // 5 minutes timeout
 
-// --- DOCX text extraction ---
-async function extractDocxText(buffer: Buffer): Promise<string> {
-  // DOCX files are ZIP archives containing XML. We extract the word/document.xml
-  // using the built-in Node.js APIs (no external dep needed beyond what's available).
-  // We use a simple regex approach to strip XML tags since we only need plain text.
-  try {
-    const { promisify } = await import("util");
-    const zlib = await import("zlib");
-    const unzip = promisify(zlib.unzip);
-
-    // Use JSZip-like approach: read the ZIP and extract document.xml
-    // Since we don't want to add JSZip, we'll use the 'adm-zip' package if available,
-    // or fall back to a direct XML parse of the binary
-    // The docx package is already installed - let's use it properly
-    const { Document, Packer } = await import("docx").catch(() => {
-      throw new Error("docx package not available");
-    });
-
-    // docx package is a writer, not a reader. Use mammoth instead if available.
-    // Fall back to reading as ZIP manually
-    throw new Error("Need ZIP reader");
-  } catch {
-    // Fallback: Extract text from DOCX by reading the ZIP archive manually
-    // DOCX = ZIP file, word/document.xml contains the text
-    try {
-      // Try using a simple ZIP reader approach
-      const text = await extractTextFromDocxBuffer(buffer);
-      return text;
-    } catch (e) {
-      console.warn("DOCX extraction failed:", e);
-      throw new Error(
-        "Could not extract text from DOCX file. Please convert to PDF or TXT."
-      );
-    }
-  }
-}
+// --- DOCX text extraction (reads ZIP archive, extracts word/document.xml) ---
 
 // Simple DOCX text extractor by reading ZIP entries
 async function extractTextFromDocxBuffer(buffer: Buffer): Promise<string> {
