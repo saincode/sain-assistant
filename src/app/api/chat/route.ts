@@ -4,22 +4,59 @@ import { getEmbeddings } from "@/utils/embeddings";
 
 export const dynamic = "force-dynamic";
 
-// Ordered list of fallback models to try when rate limited
-const FALLBACK_MODELS = [
+// --- Call Google Gemini directly (primary - free, generous limits) ---
+async function callGemini(
+  apiKey: string,
+  systemPrompt: string,
+  userQuestion: string
+): Promise<string | null> {
+  const model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ role: "user", parts: [{ text: userQuestion }] }],
+        generationConfig: {
+          temperature: 0.3,
+          maxOutputTokens: 1024,
+        },
+      }),
+    }
+  );
+
+  if (!res.ok) {
+    const err = await res.text();
+    console.warn(`⚠️ Gemini error (${res.status}):`, err);
+    return null;
+  }
+
+  const data = await res.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) {
+    console.warn("⚠️ Gemini returned empty response");
+    return null;
+  }
+
+  console.log(`✅ Response from Gemini (${model})`);
+  return text;
+}
+
+// --- OpenRouter fallback models (free tier) ---
+const OPENROUTER_FALLBACKS = [
   "deepseek/deepseek-chat-v3-0324:free",
   "google/gemini-2.0-flash-exp:free",
   "google/gemma-3-27b-it:free",
   "meta-llama/llama-3.3-70b-instruct:free",
   "meta-llama/llama-3.1-8b-instruct:free",
-  "meta-llama/llama-3.2-3b-instruct:free",
-  "qwen/qwen3-8b:free",
   "qwen/qwen3-14b:free",
+  "qwen/qwen3-8b:free",
   "mistralai/mistral-7b-instruct:free",
   "google/gemma-3-12b-it:free",
-  "google/gemma-4-31b-it:free",
-  "nousresearch/hermes-3-llama-3.1-405b:free",
   "microsoft/phi-3-mini-128k-instruct:free",
-  "huggingfaceh4/zephyr-7b-beta:free",
 ];
 
 async function callOpenRouter(
@@ -27,7 +64,7 @@ async function callOpenRouter(
   model: string,
   systemPrompt: string,
   userQuestion: string
-): Promise<{ text: string; modelUsed: string } | null> {
+): Promise<string | null> {
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -42,7 +79,7 @@ async function callOpenRouter(
         { role: "system", content: systemPrompt },
         { role: "user", content: userQuestion },
       ],
-      max_tokens: 800,
+      max_tokens: 1024,
       temperature: 0.3,
     }),
   });
@@ -50,43 +87,40 @@ async function callOpenRouter(
   const txt = await res.text();
 
   if (!res.ok) {
-    const parsed = JSON.parse(txt).error?.code;
-    // Rate limited — signal caller to try fallback
-    if (res.status === 429 || parsed === 429) {
-      console.warn(`⚠️ Model ${model} rate limited, will try fallback.`);
-      return null;
-    }
-    throw new Error(`OpenRouter error (${res.status}): ${txt}`);
+    console.warn(`⚠️ OpenRouter model ${model} failed (${res.status})`);
+    return null; // Try next model
   }
 
   const data = JSON.parse(txt);
   const answer =
     data?.choices?.[0]?.message?.content ||
     data?.choices?.[0]?.text ||
-    "No answer generated.";
+    null;
 
-  return { text: answer, modelUsed: model };
+  if (!answer) return null;
+
+  console.log(`✅ Response from OpenRouter model: ${model}`);
+  return answer;
 }
 
 // --- Chat Route Handler ---
 export async function POST(req: NextRequest) {
   try {
+    const GEMINI_KEY = process.env.GEMINI_API_KEY;
     const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY;
     const PINECONE_KEY = process.env.PINECONE_API_KEY;
     const PINECONE_INDEX = process.env.PINECONE_INDEX_NAME;
 
-    // Primary model from env, falling back to our list
-    const primaryModel =
-      process.env.OPENROUTER_CHAT_MODEL || FALLBACK_MODELS[0];
-
-    if (!OPENROUTER_KEY || !PINECONE_KEY || !PINECONE_INDEX) {
-      console.error("❌ Missing environment variables:", {
-        hasOR: !!OPENROUTER_KEY,
-        hasPC: !!PINECONE_KEY,
-        hasIndex: !!PINECONE_INDEX,
-      });
+    if (!PINECONE_KEY || !PINECONE_INDEX) {
       return NextResponse.json(
-        { error: "Server configuration missing" },
+        { error: "Server configuration missing (Pinecone)" },
+        { status: 500 }
+      );
+    }
+
+    if (!GEMINI_KEY && !OPENROUTER_KEY) {
+      return NextResponse.json(
+        { error: "No AI API key configured (GEMINI_API_KEY or OPENROUTER_API_KEY)" },
         { status: 500 }
       );
     }
@@ -95,13 +129,9 @@ export async function POST(req: NextRequest) {
     const messages = body.messages;
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
-      return NextResponse.json(
-        { error: "No messages provided" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "No messages provided" }, { status: 400 });
     }
 
-    // Extract last user message
     const lastMessage = messages[messages.length - 1];
     const question = lastMessage?.content?.trim();
 
@@ -109,22 +139,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Empty question" }, { status: 400 });
     }
 
-    console.log("🧠 New question received:", question);
+    console.log("🧠 Question:", question);
 
-    // 1️⃣ Generate embedding for the user's question
+    // 1️⃣ Generate embedding
     let qEmb: number[];
     try {
       qEmb = await getEmbeddings(question);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error("❌ Embedding failed:", msg);
-      return NextResponse.json(
-        { error: `Embedding failed: ${msg}` },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: `Embedding failed: ${msg}` }, { status: 500 });
     }
 
-    // 2️⃣ Query Pinecone for relevant chunks
+    // 2️⃣ Query Pinecone
     const pinecone = new Pinecone({ apiKey: PINECONE_KEY });
     const index = pinecone.index(PINECONE_INDEX);
 
@@ -144,65 +171,46 @@ export async function POST(req: NextRequest) {
       )
       .join("\n\n");
 
-    // 3️⃣ Build prompt
+    // 3️⃣ Build system prompt
     const systemPrompt = context
-      ? `You are a helpful AI assistant that answers questions using the provided document context.
+      ? `You are sAIn, a helpful AI assistant that answers questions using the provided document context.
 If the answer isn't clearly in the context, say so honestly but try to help with what you know.
 
 Document Context:
 ${context}`
-      : `You are a helpful AI assistant called sAIn. No document has been uploaded yet. Encourage the user to upload a PDF, DOCX, or TXT document using the paperclip button, then ask questions about it. You can also answer general questions.`;
+      : `You are sAIn, a helpful AI assistant. No document has been uploaded yet.
+Encourage the user to upload a PDF, DOCX, or TXT document using the paperclip button, then ask questions about it.
+You can also answer general knowledge questions.`;
 
-    // 4️⃣ Call OpenRouter with fallback chain
-    console.log(`🚀 Calling OpenRouter with model: ${primaryModel}`);
+    // 4️⃣ Try Gemini first (primary — free, reliable)
+    let answer: string | null = null;
 
-    // Build the ordered list: primary model first, then fallbacks (skip duplicates)
-    const modelsToTry = [
-      primaryModel,
-      ...FALLBACK_MODELS.filter((m) => m !== primaryModel),
-    ];
+    if (GEMINI_KEY) {
+      console.log("🚀 Trying Gemini...");
+      answer = await callGemini(GEMINI_KEY, systemPrompt, question);
+    }
 
-    let result: { text: string; modelUsed: string } | null = null;
-    let lastError = "";
-
-    for (const model of modelsToTry) {
-      try {
-        result = await callOpenRouter(
-          OPENROUTER_KEY,
-          model,
-          systemPrompt,
-          question
-        );
-        if (result !== null) {
-          console.log(`✅ Response from model: ${result.modelUsed}`);
-          break;
-        }
-      } catch (err: unknown) {
-        lastError = err instanceof Error ? err.message : String(err);
-        console.error(`❌ Model ${model} failed:`, lastError);
-        // Continue trying other models instead of stopping
+    // 5️⃣ Fallback to OpenRouter models
+    if (!answer && OPENROUTER_KEY) {
+      console.log("🔄 Falling back to OpenRouter...");
+      for (const model of OPENROUTER_FALLBACKS) {
+        answer = await callOpenRouter(OPENROUTER_KEY, model, systemPrompt, question);
+        if (answer) break;
       }
     }
 
-    if (!result) {
+    if (!answer) {
       return NextResponse.json(
-        {
-          error:
-            "All AI models are temporarily rate-limited. Please wait a moment and try again.",
-          detail: lastError,
-        },
+        { error: "All AI models are unavailable right now. Please try again in a moment." },
         { status: 503 }
       );
     }
 
-    // 5️⃣ Return AI answer
-    return NextResponse.json({ response: result.text });
+    return NextResponse.json({ response: answer });
+
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("❌ Chat route error:", err);
-    return NextResponse.json(
-      { error: msg || "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: msg || "Internal server error" }, { status: 500 });
   }
 }
